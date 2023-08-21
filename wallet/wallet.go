@@ -5,7 +5,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
-	"golang-blockchain/utils"
+	"log"
 )
 
 const (
@@ -19,32 +19,34 @@ type Wallet struct {
 }
 
 func (w Wallet) Address() []byte {
-	publicKey := PublicKeyHash(w.PublicKey)
-	version := append([]byte{version}, publicKey...)
-	checksum := Checksum(version)
-	hash := append(version, checksum...)
-	address := utils.Base58Encode(hash)
+	pubHash := PublicKeyHash(w.PublicKey)
+
+	versionedHash := append([]byte{version}, pubHash...)
+	checksum := Checksum(versionedHash)
+
+	fullHash := append(versionedHash, checksum...)
+	address := Base58Encode(fullHash)
+
 	return address
 }
 
 func NewKeyPair() (ecdsa.PrivateKey, []byte) {
-	curva := elliptic.P256()
-	privateKey, err := ecdsa.GenerateKey(curva, rand.Reader)
+	curve := elliptic.P256()
+
+	private, err := ecdsa.GenerateKey(curve, rand.Reader)
 	if err != nil {
-		panic(err)
+		log.Panic(err)
 	}
 
-	publicKey := append(privateKey.PublicKey.X.Bytes(),
-		privateKey.PublicKey.Y.Bytes()...)
-	return *privateKey, publicKey
+	pub := append(private.PublicKey.X.Bytes(), private.PublicKey.Y.Bytes()...)
+	return *private, pub
 }
 
 func MakeWallet() *Wallet {
-	privateKey, publicKey := NewKeyPair()
-	return &Wallet{
-		PrivateKey: privateKey,
-		PublicKey:  publicKey,
-	}
+	private, public := NewKeyPair()
+	wallet := Wallet{private, public}
+
+	return &wallet
 }
 
 func PublicKeyHash(publicKey []byte) []byte {
@@ -53,8 +55,8 @@ func PublicKeyHash(publicKey []byte) []byte {
 }
 
 func Checksum(payload []byte) []byte {
-	hash := sha256.Sum256(payload)
-	hash = sha256.Sum256(hash[:])
+	firstHash := sha256.Sum256(payload)
+	secondHash := sha256.Sum256(firstHash[:])
 
-	return hash[:checksumLength]
+	return secondHash[:checksumLength]
 }
