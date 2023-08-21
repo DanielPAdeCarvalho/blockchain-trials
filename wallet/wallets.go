@@ -2,11 +2,11 @@ package wallet
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/elliptic"
 	"encoding/gob"
 	"fmt"
-	"io/ioutil"
-	"log"
+	"math/big"
 	"os"
 )
 
@@ -14,6 +14,29 @@ const walletFile = "./tmp/wallets.data"
 
 type Wallets struct {
 	Wallets map[string]*Wallet
+}
+
+type SerializableWallet struct {
+	PrivateKey []byte
+	PublicKey  []byte
+}
+
+func (w *Wallet) ToSerializable() SerializableWallet {
+	return SerializableWallet{
+		PrivateKey: w.PrivateKey.D.Bytes(),
+		PublicKey:  w.PublicKey,
+	}
+}
+
+func FromSerializable(sw SerializableWallet) Wallet {
+	priv := new(ecdsa.PrivateKey)
+	priv.Curve = elliptic.P256()
+	priv.D = new(big.Int).SetBytes(sw.PrivateKey)
+	priv.PublicKey.X, priv.PublicKey.Y = priv.Curve.ScalarBaseMult(sw.PrivateKey)
+	return Wallet{
+		PrivateKey: *priv,
+		PublicKey:  sw.PublicKey,
+	}
 }
 
 func CreateWallets() (*Wallets, error) {
@@ -48,43 +71,52 @@ func (ws Wallets) GetWallet(address string) Wallet {
 	return *ws.Wallets[address]
 }
 
-func (ws *Wallets) LoadFile() error {
-	if _, err := os.Stat(walletFile); os.IsNotExist(err) {
-		return err
+func (ws *Wallets) SaveFile() error {
+	serializableWallets := make(map[string]SerializableWallet)
+	for address, wallet := range ws.Wallets {
+		serializableWallets[address] = wallet.ToSerializable()
 	}
 
-	var wallets Wallets
-
-	fileContent, err := ioutil.ReadFile(walletFile)
+	var content bytes.Buffer
+	encoder := gob.NewEncoder(&content)
+	err := encoder.Encode(serializableWallets)
 	if err != nil {
 		return err
 	}
 
-	gob.Register(elliptic.P256())
-	decoder := gob.NewDecoder(bytes.NewReader(fileContent))
-	err = decoder.Decode(&wallets)
+	file, err := os.Create(walletFile)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.Write(content.Bytes())
 	if err != nil {
 		return err
 	}
 
-	ws.Wallets = wallets.Wallets
-
-	return nil
+	return file.Sync()
 }
 
-func (ws *Wallets) SaveFile() {
-	var content bytes.Buffer
-
-	gob.Register(elliptic.P256())
-
-	encoder := gob.NewEncoder(&content)
-	err := encoder.Encode(ws)
+func (ws *Wallets) LoadFile() error {
+	file, err := os.Open(walletFile)
 	if err != nil {
-		log.Panic(err)
+		return err
+	}
+	defer file.Close()
+
+	var serializableWallets map[string]SerializableWallet
+	decoder := gob.NewDecoder(file)
+	err = decoder.Decode(&serializableWallets)
+	if err != nil {
+		return err
 	}
 
-	err = ioutil.WriteFile(walletFile, content.Bytes(), 0644)
-	if err != nil {
-		log.Panic(err)
+	ws.Wallets = make(map[string]*Wallet)
+	for address, sw := range serializableWallets {
+		wallet := FromSerializable(sw)
+		ws.Wallets[address] = &wallet
 	}
+
+	return nil
 }
