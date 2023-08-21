@@ -58,6 +58,7 @@ func ContinueBlockChain(address string) *BlockChain {
 	}
 
 	opts := badger.DefaultOptions(dbPath)
+	opts.Logger = nil
 	db, err := badger.Open(opts)
 	Handle(err)
 
