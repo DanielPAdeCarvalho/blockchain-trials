@@ -59,6 +59,9 @@ func (cli *CommandLine) printChain() {
 		fmt.Printf("Hash: %x\n", block.Hash)
 		pow := blockchain.NewProof(block)
 		fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
+		for _, t := range block.Transactions {
+			fmt.Println(t)
+		}
 		fmt.Println()
 
 		if len(block.PrevHash) == 0 {
@@ -68,26 +71,42 @@ func (cli *CommandLine) printChain() {
 }
 
 func (cli *CommandLine) createBlockChain(address string) {
+	if !wallet.ValidateAddress(address) {
+		log.Fatalf("Invalid address: %s", address)
+	}
 	chain := blockchain.InitBlockChain(address)
 	chain.Database.Close()
 	fmt.Println("Finished!")
 }
 
 func (cli *CommandLine) getBalance(address string) {
+	if !wallet.ValidateAddress(address) {
+		log.Fatalf("Invalid address: %s", address)
+	}
+
 	chain := blockchain.ContinueBlockChain(address)
 	defer chain.Database.Close()
 
 	balance := 0
-	UTXOs := chain.FindUTXO(address)
-
-	for _, out := range UTXOs {
-		balance += out.Value
+	publicKey := wallet.Base58Decode([]byte(address))
+	checksum := len(publicKey) - 4
+	publicKey = publicKey[1:checksum]
+	UTXOs := chain.FindUTXO(publicKey)
+	for _, UTXO := range UTXOs {
+		balance += UTXO.Value
 	}
 
 	fmt.Printf("Balance of %s: %d\n", address, balance)
 }
 
 func (cli *CommandLine) send(from, to string, amount int) {
+	if !wallet.ValidateAddress(from) {
+		log.Fatalf("Invalid address: %s", from)
+	}
+	if !wallet.ValidateAddress(to) {
+		log.Fatalf("Invalid address: %s", to)
+	}
+
 	chain := blockchain.ContinueBlockChain(from)
 	defer chain.Database.Close()
 

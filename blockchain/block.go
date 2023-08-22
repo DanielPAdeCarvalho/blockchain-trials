@@ -7,10 +7,10 @@ import (
 )
 
 type Block struct {
-	Hash        []byte
-	Transaction []*Transaction
-	PrevHash    []byte
-	Nonce       int
+	Hash         []byte
+	Transactions []*Transaction
+	PrevHash     []byte
+	Nonce        int
 }
 
 func CreateBlock(trans []*Transaction, prevHash []byte) *Block {
@@ -56,7 +56,7 @@ func Deserialize(data []byte) *Block {
 func (b *Block) HashTransaction() []byte {
 	var txHashes [][]byte
 	var txHashe [32]byte
-	for _, tx := range b.Transaction {
+	for _, tx := range b.Transactions {
 		txHashes = append(txHashes, tx.ID)
 	}
 	txHashe = sha256.Sum256(bytes.Join(txHashes, []byte{}))
